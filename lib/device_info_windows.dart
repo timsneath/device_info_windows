@@ -1,13 +1,9 @@
-import 'dart:async';
+import 'dart:ffi';
+import 'dart:io';
 
-import 'package:flutter/services.dart';
+import 'package:ffi/ffi.dart';
+import 'package:win32/win32.dart';
 
 class DeviceInfoWindows {
-  static const MethodChannel _channel =
-      const MethodChannel('device_info_windows');
-
-  static Future<String> get platformVersion async {
-    final String version = await _channel.invokeMethod('getPlatformVersion');
-    return version;
-  }
+  List<String> get processInfo => [];
 }
