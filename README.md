@@ -1,3 +1,6 @@
 # device_info_windows
 
-A new flutter plugin project.
+Uses WMI to get information about the current Windows device. 
+
+An example is provided in the `example` folder that shows running processes:
+![](docs/images/process-viewer.png)

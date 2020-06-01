@@ -8,7 +8,9 @@ environment:
   flutter: ">=1.10.0"
 
 dependencies:
-  win32: ^1.4.0
+  win32:
+    git:
+      https://github.com/timsneath/win32
   ffi: ^0.1.3
   flutter:
     sdk: flutter
