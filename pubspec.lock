@@ -152,11 +152,9 @@ packages:
   win32:
     dependency: "direct main"
     description:
-      path: "."
-      ref: HEAD
-      resolved-ref: "62d470019329fa46427c837c42600bf3d86b93d0"
-      url: "https://github.com/timsneath/win32"
-    source: git
+      path: "../win32"
+      relative: true
+    source: path
     version: "1.4.1"
 sdks:
   dart: ">=2.7.0 <3.0.0"

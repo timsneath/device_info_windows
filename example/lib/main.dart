@@ -19,8 +19,7 @@ class _MyAppState extends State<MyApp> {
     super.initState();
 
     deviceInfo = DeviceInfoWindows();
-    deviceInfo.Initialize();
-    processes = deviceInfo.Processes;
+    processes = deviceInfo.listRunningProcesses();
   }
 
   @override
@@ -28,22 +27,33 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       home: Scaffold(
         appBar: AppBar(
-          title: const Text('Process Viewer'),
-          actions: [
-            IconButton(
-              icon: Icon(Icons.refresh),
-              onPressed: () {
-                setState(() {
-                  processes = deviceInfo.Processes;
-                });
-              },
-            )
-          ],
+          title: Text('Process Viewer (${processes.length} processes)'),
         ),
         body: ListView(
+          padding: const EdgeInsets.all(10),
           children: [
-            for (var process in processes) Text(process),
+            DataTable(
+              columns: [
+                DataColumn(label: Text('Process')),
+              ],
+              rows: [
+                for (var process in processes)
+                  DataRow(
+                    cells: [
+                      DataCell(Text(process)),
+                    ],
+                  ),
+              ],
+            ),
           ],
+        ),
+        floatingActionButton: IconButton(
+          icon: Icon(Icons.refresh),
+          onPressed: () {
+            setState(() {
+              processes = deviceInfo.listRunningProcesses();
+            });
+          },
         ),
       ),
     );

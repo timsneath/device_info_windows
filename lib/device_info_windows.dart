@@ -5,10 +5,12 @@ import 'package:win32/win32.dart';
 
 class DeviceInfoWindows {
   bool isInitialized = false;
+  bool isConnected = false;
 
-  void Initialize() {
-    isInitialized = true;
+  IWbemServices pSvc;
+  IWbemLocator pLoc;
 
+  void initialize() {
     // Initialize COM
     var hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     if (FAILED(hr)) {
@@ -29,23 +31,28 @@ class DeviceInfoWindows {
         );
 
     if (FAILED(hr)) {
-      final exception = COMException(hr);
-      print(exception.toString());
+      // If RPC_E_TOO_LATE, we don't have to bail; CoInititializeSecurity() can
+      // only be called once per process.
+      if (hr.toUnsigned(32) != RPC_E_TOO_LATE) {
+        final exception = COMException(hr);
+        print(exception.toString());
 
-      CoUninitialize();
-      throw exception; // Program has failed.
+        close();
+        throw exception;
+      }
     }
+
+    isInitialized = true;
   }
 
-  List<String> get Processes {
+  void connect() {
     if (!isInitialized) {
-      Initialize();
+      initialize();
     }
-    final processes = <String>[];
 
     // Obtain the initial locator to Windows Management
     // on a particular host computer.
-    IWbemLocator pLoc = IWbemLocator(COMObject.allocate().addressOf);
+    pLoc = IWbemLocator(COMObject.allocate().addressOf);
 
     var hr = CoCreateInstance(
         GUID.fromString(CLSID_WbemLocator).addressOf,
@@ -58,7 +65,7 @@ class DeviceInfoWindows {
       final exception = COMException(hr);
       print(exception.toString());
 
-      CoUninitialize();
+      close();
       throw exception;
     }
 
@@ -83,14 +90,14 @@ class DeviceInfoWindows {
       final exception = COMException(hr);
       print(exception.toString());
 
-      pLoc.Release();
-      CoUninitialize();
-      throw exception; // Program has failed.
+      disconnect();
+      close();
+      throw exception;
     }
 
     print('Connected to ROOT\\CIMV2 WMI namespace');
 
-    final pSvc = IWbemServices(proxy.cast());
+    pSvc = IWbemServices(proxy.cast());
 
     // Set the IWbemServices proxy so that impersonation
     // of the user (client) occurs.
@@ -110,9 +117,20 @@ class DeviceInfoWindows {
       print(exception.toString());
 
       pSvc.Release();
-      pLoc.Release();
-      CoUninitialize();
-      throw exception; // Program has failed.
+      disconnect();
+      close();
+      throw exception;
+    }
+
+    isConnected = true;
+  }
+
+  List<String> listRunningProcesses() {
+    final processes = <String>[];
+
+    if (!isConnected) {
+      print('Connecting');
+      connect();
     }
 
     // Use the IWbemServices pointer to make requests of WMI.
@@ -121,7 +139,7 @@ class DeviceInfoWindows {
     IEnumWbemClassObject enumerator;
 
     // For example, query for all the running processes
-    hr = pSvc.ExecQuery(
+    var hr = pSvc.ExecQuery(
         TEXT('WQL'),
         TEXT('SELECT * FROM Win32_Process'),
         WBEM_GENERIC_FLAG_TYPE.WBEM_FLAG_FORWARD_ONLY |
@@ -134,8 +152,8 @@ class DeviceInfoWindows {
       print(exception.toString());
 
       pSvc.Release();
-      pLoc.Release();
-      CoUninitialize();
+      disconnect();
+      close();
 
       throw exception;
     } else {
@@ -157,15 +175,8 @@ class DeviceInfoWindows {
 
         final clsObj = IWbemClassObject(pClsObj.cast());
 
-        // A VARIANT is a union struct, which can't be directly represented by
-        // FFI yet. In this case we know that the VARIANT can only contain a BSTR
-        // so we are able to use a specialized variant.
-        final vtProp = VARIANT_POINTER.allocate();
-        hr = clsObj.Get(TEXT('Name'), 0, vtProp.addressOf, nullptr, nullptr);
-        if (SUCCEEDED(hr)) {
-          processes.add(vtProp.ptr.cast<Utf16>().unpackString(256));
-        }
-        VariantClear(vtProp.addressOf);
+        final processName = getProperty(clsObj, 'Name');
+        processes.add(processName);
 
         clsObj.Release();
       }
@@ -173,13 +184,36 @@ class DeviceInfoWindows {
     }
 
     pSvc.Release();
-    pLoc.Release();
+    disconnect();
     enumerator.Release();
 
     return processes;
   }
 
-  void Close() {
+  String getProperty(IWbemClassObject clsObj, String key) {
+    // A VARIANT is a union struct, which can't be directly represented by
+    // FFI yet. In this case we know that the VARIANT can only contain a BSTR
+    // so we are able to use a specialized variant.
+    final vtProp = VARIANT_POINTER.allocate();
+    final hr = clsObj.Get(TEXT(key), 0, vtProp.addressOf, nullptr, nullptr);
+    String value;
+
+    if (SUCCEEDED(hr)) {
+      value = vtProp.ptr.cast<Utf16>().unpackString(256);
+    }
+    VariantClear(vtProp.addressOf);
+    return value;
+  }
+
+  void disconnect() {
+    pLoc.Release();
+
+    isConnected = false;
+  }
+
+  void close() {
     CoUninitialize();
+
+    isInitialized = false;
   }
 }
