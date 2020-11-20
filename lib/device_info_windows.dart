@@ -4,13 +4,14 @@ import 'package:ffi/ffi.dart';
 import 'package:win32/win32.dart';
 
 class DeviceInfoWindows {
-  bool isInitialized = false;
-  bool isConnected = false;
+  bool _isInitialized = false;
+  bool _isConnected = false;
 
-  IWbemServices pSvc;
-  IWbemLocator pLoc;
+  late IWbemServices _pSvc;
+  late IWbemLocator _pLoc;
 
-  void initialize() {
+  /// Initializes the class.
+  void _initialize() {
     // Initialize COM
     var hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     if (FAILED(hr)) {
@@ -42,24 +43,24 @@ class DeviceInfoWindows {
       }
     }
 
-    isInitialized = true;
+    _isInitialized = true;
   }
 
-  void connect() {
-    if (!isInitialized) {
-      initialize();
+  void _connect() {
+    if (!_isInitialized) {
+      _initialize();
     }
 
     // Obtain the initial locator to Windows Management
     // on a particular host computer.
-    pLoc = IWbemLocator(COMObject.allocate().addressOf);
+    _pLoc = IWbemLocator(COMObject.allocate().addressOf);
 
     var hr = CoCreateInstance(
         GUID.fromString(CLSID_WbemLocator).addressOf,
         nullptr,
         CLSCTX_INPROC_SERVER,
         GUID.fromString(IID_IWbemLocator).addressOf,
-        pLoc.ptr.cast());
+        _pLoc.ptr.cast());
 
     if (FAILED(hr)) {
       final exception = COMException(hr);
@@ -75,7 +76,7 @@ class DeviceInfoWindows {
     // current user and obtain pointer pSvc
     // to make IWbemServices calls.
 
-    hr = pLoc.ConnectServer(
+    hr = _pLoc.ConnectServer(
         TEXT('ROOT\\CIMV2'), // WMI namespace
         nullptr, // User name
         nullptr, // User password
@@ -90,14 +91,14 @@ class DeviceInfoWindows {
       final exception = COMException(hr);
       print(exception.toString());
 
-      disconnect();
+      _disconnect();
       close();
       throw exception;
     }
 
     print('Connected to ROOT\\CIMV2 WMI namespace');
 
-    pSvc = IWbemServices(proxy.cast());
+    _pSvc = IWbemServices(proxy.cast());
 
     // Set the IWbemServices proxy so that impersonation
     // of the user (client) occurs.
@@ -116,21 +117,21 @@ class DeviceInfoWindows {
       final exception = COMException(hr);
       print(exception.toString());
 
-      pSvc.Release();
-      disconnect();
+      _pSvc.Release();
+      _disconnect();
       close();
       throw exception;
     }
 
-    isConnected = true;
+    _isConnected = true;
   }
 
+  /// Returns a list of running processes on the current system.
   List<String> listRunningProcesses() {
     final processes = <String>[];
 
-    if (!isConnected) {
-      print('Connecting');
-      connect();
+    if (!_isConnected) {
+      _connect();
     }
 
     // Use the IWbemServices pointer to make requests of WMI.
@@ -139,7 +140,7 @@ class DeviceInfoWindows {
     IEnumWbemClassObject enumerator;
 
     // For example, query for all the running processes
-    var hr = pSvc.ExecQuery(
+    var hr = _pSvc.ExecQuery(
         TEXT('WQL'),
         TEXT('SELECT * FROM Win32_Process'),
         WBEM_GENERIC_FLAG_TYPE.WBEM_FLAG_FORWARD_ONLY |
@@ -151,8 +152,8 @@ class DeviceInfoWindows {
       final exception = COMException(hr);
       print(exception.toString());
 
-      pSvc.Release();
-      disconnect();
+      _pSvc.Release();
+      _disconnect();
       close();
 
       throw exception;
@@ -161,7 +162,7 @@ class DeviceInfoWindows {
 
       final uReturn = allocate<Uint32>();
 
-      int idx = 0;
+      var idx = 0;
       while (enumerator.ptr.address > 0) {
         final pClsObj = allocate<IntPtr>();
 
@@ -175,28 +176,30 @@ class DeviceInfoWindows {
 
         final clsObj = IWbemClassObject(pClsObj.cast());
 
-        final processName = getProperty(clsObj, 'Name');
-        processes.add(processName);
+        final processName = _getProperty(clsObj, 'Name');
+        if (processName != null) {
+          processes.add(processName);
+        }
 
         clsObj.Release();
       }
       print('$idx processes found.');
     }
 
-    pSvc.Release();
-    disconnect();
+    _pSvc.Release();
+    _disconnect();
     enumerator.Release();
 
     return processes;
   }
 
-  String getProperty(IWbemClassObject clsObj, String key) {
+  String? _getProperty(IWbemClassObject clsObj, String key) {
     // A VARIANT is a union struct, which can't be directly represented by
     // FFI yet. In this case we know that the VARIANT can only contain a BSTR
     // so we are able to use a specialized variant.
-    final vtProp = VARIANT_POINTER.allocate();
+    final vtProp = VARIANT.allocate();
     final hr = clsObj.Get(TEXT(key), 0, vtProp.addressOf, nullptr, nullptr);
-    String value;
+    String? value;
 
     if (SUCCEEDED(hr)) {
       value = vtProp.ptr.cast<Utf16>().unpackString(256);
@@ -205,15 +208,19 @@ class DeviceInfoWindows {
     return value;
   }
 
-  void disconnect() {
-    pLoc.Release();
+  void _disconnect() {
+    _pLoc.Release();
 
-    isConnected = false;
+    _isConnected = false;
   }
 
+  /// Closes the connection to WMI.
+  ///
+  /// You should call this method before disposing of this class to uninitialize
+  /// the underlying COM library.
   void close() {
     CoUninitialize();
 
-    isInitialized = false;
+    _isInitialized = false;
   }
 }

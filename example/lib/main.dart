@@ -11,8 +11,8 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  DeviceInfoWindows deviceInfo;
-  List<String> processes;
+  late DeviceInfoWindows deviceInfo;
+  late List<String> processes;
 
   @override
   void initState() {
@@ -23,39 +23,37 @@ class _MyAppState extends State<MyApp> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Scaffold(
-        appBar: AppBar(
-          title: Text('Process Viewer (${processes.length} processes)'),
+  Widget build(BuildContext context) => MaterialApp(
+        home: Scaffold(
+          appBar: AppBar(
+            title: Text('Process Viewer (${processes.length} processes)'),
+          ),
+          body: ListView(
+            padding: const EdgeInsets.all(10),
+            children: [
+              DataTable(
+                columns: const [
+                  DataColumn(label: Text('Process')),
+                ],
+                rows: [
+                  for (var process in processes)
+                    DataRow(
+                      cells: [
+                        DataCell(Text(process)),
+                      ],
+                    ),
+                ],
+              ),
+            ],
+          ),
+          floatingActionButton: IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              setState(() {
+                processes = deviceInfo.listRunningProcesses();
+              });
+            },
+          ),
         ),
-        body: ListView(
-          padding: const EdgeInsets.all(10),
-          children: [
-            DataTable(
-              columns: [
-                DataColumn(label: Text('Process')),
-              ],
-              rows: [
-                for (var process in processes)
-                  DataRow(
-                    cells: [
-                      DataCell(Text(process)),
-                    ],
-                  ),
-              ],
-            ),
-          ],
-        ),
-        floatingActionButton: IconButton(
-          icon: Icon(Icons.refresh),
-          onPressed: () {
-            setState(() {
-              processes = deviceInfo.listRunningProcesses();
-            });
-          },
-        ),
-      ),
-    );
-  }
+      );
 }
