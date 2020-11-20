@@ -1,6 +1,6 @@
 name: device_info_windows
-description: A plugin that uses FFI to offer device information
-version: 0.2.0-nullsafety.1
+description: Uses WMI to read information about running processes from the underlying Windows operating system.
+version: 0.2.0-nullsafety.2
 homepage: https://github.com/timsneath/device_info_windows
 
 environment:
