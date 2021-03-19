@@ -1,4 +1,4 @@
-## 0.2.0-nullsafety.2
+## 1.0.0
 
 - Add sound null safety support
 

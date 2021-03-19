@@ -34,7 +34,7 @@ class DeviceInfoWindows {
     if (FAILED(hr)) {
       // If RPC_E_TOO_LATE, we don't have to bail; CoInititializeSecurity() can
       // only be called once per process.
-      if (hr.toUnsigned(32) != RPC_E_TOO_LATE) {
+      if (hr != RPC_E_TOO_LATE) {
         final exception = COMException(hr);
         print(exception.toString());
 
@@ -53,30 +53,15 @@ class DeviceInfoWindows {
 
     // Obtain the initial locator to Windows Management
     // on a particular host computer.
-    _pLoc = IWbemLocator(COMObject.allocate().addressOf);
+    _pLoc = WbemLocator.createInstance();
 
-    var hr = CoCreateInstance(
-        GUID.fromString(CLSID_WbemLocator).addressOf,
-        nullptr,
-        CLSCTX_INPROC_SERVER,
-        GUID.fromString(IID_IWbemLocator).addressOf,
-        _pLoc.ptr.cast());
-
-    if (FAILED(hr)) {
-      final exception = COMException(hr);
-      print(exception.toString());
-
-      close();
-      throw exception;
-    }
-
-    final proxy = allocate<IntPtr>();
+    final proxy = calloc<IntPtr>();
 
     // Connect to the root\cimv2 namespace with the
     // current user and obtain pointer pSvc
     // to make IWbemServices calls.
 
-    hr = _pLoc.ConnectServer(
+    var hr = _pLoc.ConnectServer(
         TEXT('ROOT\\CIMV2'), // WMI namespace
         nullptr, // User name
         nullptr, // User password
@@ -84,7 +69,7 @@ class DeviceInfoWindows {
         NULL, // Security flags
         nullptr, // Authority
         nullptr, // Context object
-        proxy // IWbemServices proxy
+        proxy.cast() // IWbemServices proxy
         );
 
     if (FAILED(hr)) {
@@ -136,7 +121,7 @@ class DeviceInfoWindows {
 
     // Use the IWbemServices pointer to make requests of WMI.
 
-    final pEnumerator = allocate<IntPtr>();
+    final pEnumerator = calloc<Pointer<COMObject>>();
     IEnumWbemClassObject enumerator;
 
     // For example, query for all the running processes
@@ -160,11 +145,11 @@ class DeviceInfoWindows {
     } else {
       enumerator = IEnumWbemClassObject(pEnumerator.cast());
 
-      final uReturn = allocate<Uint32>();
+      final uReturn = calloc<Uint32>();
 
       var idx = 0;
       while (enumerator.ptr.address > 0) {
-        final pClsObj = allocate<IntPtr>();
+        final pClsObj = calloc<Pointer<COMObject>>();
 
         hr = enumerator.Next(
             WBEM_TIMEOUT_TYPE.WBEM_INFINITE, 1, pClsObj, uReturn);
@@ -177,7 +162,7 @@ class DeviceInfoWindows {
         final clsObj = IWbemClassObject(pClsObj.cast());
 
         final processName = _getProperty(clsObj, 'Name');
-        if (processName != null) {
+        if (processName.isNotEmpty) {
           processes.add(processName);
         }
 
@@ -193,19 +178,22 @@ class DeviceInfoWindows {
     return processes;
   }
 
-  String? _getProperty(IWbemClassObject clsObj, String key) {
-    // A VARIANT is a union struct, which can't be directly represented by
-    // FFI yet. In this case we know that the VARIANT can only contain a BSTR
-    // so we are able to use a specialized variant.
-    final vtProp = VARIANT.allocate();
-    final hr = clsObj.Get(TEXT(key), 0, vtProp.addressOf, nullptr, nullptr);
-    String? value;
+  String _getProperty(IWbemClassObject clsObj, String key) {
+    final vtProp = calloc<VARIANT>();
+    final keyPtr = key.toNativeUtf16();
 
-    if (SUCCEEDED(hr)) {
-      value = vtProp.ptr.cast<Utf16>().unpackString(256);
+    try {
+      final hr = clsObj.Get(keyPtr, 0, vtProp, nullptr, nullptr);
+
+      if (SUCCEEDED(hr)) {
+        return vtProp.ref.bstrVal.toDartString();
+      } else {
+        return '';
+      }
+    } finally {
+      VariantClear(vtProp);
+      free(keyPtr);
     }
-    VariantClear(vtProp.addressOf);
-    return value;
   }
 
   void _disconnect() {

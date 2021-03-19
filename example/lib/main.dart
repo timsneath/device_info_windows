@@ -36,7 +36,7 @@ class _MyAppState extends State<MyApp> {
                   DataColumn(label: Text('Process')),
                 ],
                 rows: [
-                  for (var process in processes)
+                  for (final process in processes)
                     DataRow(
                       cells: [
                         DataCell(Text(process)),
